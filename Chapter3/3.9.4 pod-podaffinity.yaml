@@ -1,0 +1,65 @@
+# affinity
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-flag
+  labels:
+    security: "S1"
+    app: "nginx"
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-affinity
+spec:
+  affinity:
+    podAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+          - key: security
+            operator: In
+            values:
+            - S1
+        topologyKey: kubernetes.io/hostname
+  containers:
+  - name: with-pod-affinity
+    image: gcr.io/google_containers/pause:2.0
+
+
+
+# anti-affinity
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: anti-affinity
+spec:
+  affinity:
+    podAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+          - key: security
+            operator: In
+            values:
+            - S1
+        topologyKey: failure-domain.beta.kubernetes.io/zone
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - nginx
+        topologyKey: kubernetes.io/hostname
+  containers:
+  - name: anti-affinity
+    image: gcr.io/google_containers/pause:2.0

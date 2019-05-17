@@ -1,0 +1,46 @@
+# can be schedued to node1
+
+$ kubectl taint nodes node1 key=value:NoSchedule
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-toleration
+spec:
+  tolerations:
+  - key: "key"
+    operator: "Equal"
+    value: "value"
+    effect: "NoSchedule"
+  containers:
+  - name: pod-toleration
+    image: gcr.io/google_containers/pause:2.0
+
+---
+  tolerations:
+  - key: "key"
+    operator: "Exists"
+    effect: "NoSchedule"
+
+
+
+
+# can't be scheduled to node1
+
+$ kubectl taint nodes node1 key1=value1:NoSchedule
+$ kubectl taint nodes node1 key1=value1:NoExecute
+$ kubectl taint nodes node1 key2=value2:NoSchedule
+
+
+---
+  tolerations:
+  - key: "key1"
+    operator: "Equal"
+    value: "value1"
+    effect: "NoSchedule"
+  - key: "key1"
+    operator: "Equal"
+    value: "value1"
+    effect: "NoExecute"
+

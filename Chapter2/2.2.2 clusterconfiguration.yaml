@@ -1,0 +1,6 @@
+apiVersion: kubeadm.k8s.io/v1beta1
+kind: ClusterConfiguration
+imageRepository: docker.io/dustise
+kubernetesVersion: v1.14.0
+networking:
+  podSubnet: "192.168.0.0/16"

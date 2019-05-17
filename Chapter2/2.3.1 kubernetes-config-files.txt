@@ -1,0 +1,46 @@
+# /etc/kubernetes/apiserver
+KUBE_API_ARGS="--etcd-servers=http://127.0.0.1:2379 --insecure-bind-address=0.0.0.0 --insecure-port=8080 --service-cluster-ip-range=169.169.0.0/16 --service-node-port-range=1-65535 --enable-admission-plugins=NamespaceLifecycle,LimitRanger,ServiceAccount,DefaultStorageClass,DefaultTolerationSeconds,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,ResourceQuota --logtostderr=false --log-dir=/var/log/kubernetes --v=0"
+
+
+
+
+# /etc/kubernetes/kubeconfig
+apiVersion: v1
+kind: Config
+users:
+- name: client
+  user:
+clusters:
+- name: default
+  cluster:
+    server: http://192.168.18.3:8080
+contexts:
+- context:
+    cluster: default
+    user: client
+  name: default
+current-context: default
+
+
+
+
+# /etc/kubernetes/controller-manager
+KUBE_CONTROLLER_MANAGER_ARGS="--kubeconfig=/etc/kubernetes/kubeconfig --logtostderr=false --log-dir=/var/log/kubernetes --v=0"
+
+
+
+
+# /etc/kubernetes/scheduler
+KUBE_SCHEDULER_ARGS="--kubeconfig=/etc/kubernetes/kubeconfig --logtostderr=false --log-dir=/var/log/kubernetes --v=0"
+
+
+
+
+# /etc/kubernetes/kubelet
+KUBELET_ARGS="--kubeconfig=/etc/kubernetes/kubeconfig --hostname-override=192.168.18.3 --logtostderr=false --log-dir=/var/log/kubernetes --v=0"
+
+
+
+
+# /etc/kubernetes/proxy
+KUBE_PROXY_ARGS="--kubeconfig=/etc/kubernetes/kubeconfig --logtostderr=false --log-dir=/var/log/kubernetes --v=2"

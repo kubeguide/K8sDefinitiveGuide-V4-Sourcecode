@@ -1,0 +1,32 @@
+---
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: redis-master-v2
+  labels:
+    name: redis-master
+    version: v2
+spec:
+  replicas: 1
+  selector:
+    name: redis-master
+    version: v2
+  template:
+    metadata:
+      labels:
+        name: redis-master
+        version: v2
+    spec:
+      containers:
+      - name: master
+        image: kubeguide/redis-master:2.0
+        ports:
+        - containerPort: 6379
+
+
+
+# kubectl rolling-update redis-master -f redis-master-controller-v2.yaml
+
+# kubectl rolling-update redis-master --image=redis-master:2.0
+
+# kubectl rolling-update redis-master --image=kubeguide/redis-master:2.0 --rollback

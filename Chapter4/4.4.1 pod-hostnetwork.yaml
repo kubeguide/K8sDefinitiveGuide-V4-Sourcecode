@@ -1,0 +1,14 @@
+apiVersion: v1 
+kind: Pod
+metadata:
+  name: webapp
+  labels:
+    app: webapp
+spec:
+  hostNetwork: true
+  containers:
+  - name: webapp
+    image: tomcat
+    imagePullPolicy: Never
+    ports:
+    - containerPort: 8080

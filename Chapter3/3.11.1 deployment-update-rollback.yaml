@@ -1,0 +1,37 @@
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.7.9
+        ports:
+        - containerPort: 80
+
+
+
+# update
+$ kubectl set image deployment/nginx-deployment nginx=nginx:1.9.1
+$ kubectl rollout status deployment/nginx-deployment
+
+
+# rollback
+$ kubectl rollout history deployment/nginx-deployment --revision=3
+$ kubectl rollout undo deployment/nginx-deployment
+$ kubectl rollout undo deployment/nginx-deployment --to-revision=2
+
+
+# pause and resume
+$ kubectl rollout pause deployment/nginx-deployment
+$ kubectl set image deploy/nginx-deployment nginx=nginx:1.9.1
+$ kubectl rollout history deploy/nginx-deployment
+$ kubectl set resources deployment nginx-deployment -c=nginx --limits=cpu=200m,memory=512Mi
+$ kubectl rollout resume deploy nginx-deployment
