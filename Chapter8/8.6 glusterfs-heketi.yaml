@@ -1,0 +1,293 @@
+# glusterfs
+---
+kind: DaemonSet
+apiVersion: extensions/v1beta1
+metadata:
+  name: glusterfs
+  labels:
+    glusterfs: daemonset
+  annotations:
+    description: GlusterFS DaemonSet
+    tags: glusterfs
+spec:
+  template:
+    metadata:
+      name: glusterfs
+      labels:
+        glusterfs-node: pod
+    spec:
+      nodeSelector:
+        storagenode: glusterfs
+      hostNetwork: true
+      containers:
+      - image: gluster/gluster-centos:latest
+        name: glusterfs
+        volumeMounts:
+        - name: glusterfs-heketi
+          mountPath: "/var/lib/heketi"
+        - name: glusterfs-run
+          mountPath: "/run"
+        - name: glusterfs-lvm
+          mountPath: "/run/lvm"
+        - name: glusterfs-etc
+          mountPath: "/etc/glusterfs"
+        - name: glusterfs-logs
+          mountPath: "/var/log/glusterfs"
+        - name: glusterfs-config
+          mountPath: "/var/lib/glusterd"
+        - name: glusterfs-dev
+          mountPath: "/dev"
+        - name: glusterfs-misc
+          mountPath: "/var/lib/misc/glusterfsd"
+        - name: glusterfs-cgroup
+          mountPath: "/sys/fs/cgroup"
+          readOnly: true
+        - name: glusterfs-ssl
+          mountPath: "/etc/ssl"
+          readOnly: true
+        securityContext:
+          capabilities: {}
+          privileged: true
+        readinessProbe:
+          timeoutSeconds: 3
+          initialDelaySeconds: 60
+          exec:
+            command:
+            - "/bin/bash"
+            - "-c"
+            - systemctl status glusterd.service
+        livenessProbe:
+          timeoutSeconds: 3
+          initialDelaySeconds: 60
+          exec:
+            command:
+            - "/bin/bash"
+            - "-c"
+            - systemctl status glusterd.service
+      volumes:
+      - name: glusterfs-heketi
+        hostPath:
+          path: "/var/lib/heketi"
+      - name: glusterfs-run
+      - name: glusterfs-lvm
+        hostPath:
+          path: "/run/lvm"
+      - name: glusterfs-etc
+        hostPath:
+          path: "/etc/glusterfs"
+      - name: glusterfs-logs
+        hostPath:
+          path: "/var/log/glusterfs"
+      - name: glusterfs-config
+        hostPath:
+          path: "/var/lib/glusterd"
+      - name: glusterfs-dev
+        hostPath:
+          path: "/dev"
+      - name: glusterfs-misc
+        hostPath:
+          path: "/var/lib/misc/glusterfsd"
+      - name: glusterfs-cgroup
+        hostPath:
+          path: "/sys/fs/cgroup"
+      - name: glusterfs-ssl
+        hostPath:
+          path: "/etc/ssl"
+
+
+# heketi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: heketi-service-account
+
+---
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: deploy-heketi
+  labels:
+    glusterfs: heketi-deployment
+    deploy-heketi: heketi-deployment
+  annotations:
+    description: Defines how to deploy Heketi
+spec:
+  replicas: 1
+  template:
+    metadata:
+      name: deploy-heketi
+      labels:
+        name: deploy-heketi
+        glusterfs: heketi-pod
+    spec:
+      serviceAccountName: heketi-service-account
+      containers:
+      - image: heketi/heketi
+        name: deploy-heketi
+        env:
+        - name: HEKETI_EXECUTOR
+          value: kubernetes
+        - name: HEKETI_FSTAB
+          value: "/var/lib/heketi/fstab"
+        - name: HEKETI_SNAPSHOT_LIMIT
+          value: '14'
+        - name: HEKETI_KUBE_GLUSTER_DAEMONSET
+          value: "y"
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: db
+          mountPath: "/var/lib/heketi"
+        readinessProbe:
+          timeoutSeconds: 3
+          initialDelaySeconds: 3
+          httpGet:
+            path: "/hello"
+            port: 8080
+        livenessProbe:
+          timeoutSeconds: 3
+          initialDelaySeconds: 30
+          httpGet:
+            path: "/hello"
+            port: 8080
+      volumes:
+      - name: db
+        hostPath:
+          path: "/heketi-data"
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: deploy-heketi
+  labels:
+    glusterfs: heketi-service
+    deploy-heketi: support
+  annotations:
+    description: Exposes Heketi Service
+spec:
+  selector:
+    name: deploy-heketi
+  ports:
+  - name: deploy-heketi
+    port: 8080
+    targetPort: 8080
+
+
+
+
+# topology.json
+{
+  "clusters": [
+    {
+      "nodes": [
+        {
+          "node": {
+            "hostnames": {
+              "manage": [
+                "k8s-node-1"
+              ],
+              "storage": [
+                "192.168.18.3"
+              ]
+            },
+            "zone": 1
+          },
+          "devices": [
+            "/dev/sdb"
+          ]
+        },
+        {
+          "node": {
+            "hostnames": {
+              "manage": [
+                "k8s-node-2"
+              ],
+              "storage": [
+                "192.168.18.4"
+              ]
+            },
+            "zone": 1
+          },
+          "devices": [
+            "/dev/sdb"
+          ]
+        },
+        {
+          "node": {
+            "hostnames": {
+              "manage": [
+                "k8s-node-3"
+              ],
+              "storage": [
+                "192.168.18.5"
+              ]
+            },
+            "zone": 1
+          },
+          "devices": [
+            "/dev/sdb"
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+
+# in heketi container
+# heketi-cli topology load --json=topology.json
+
+
+
+
+# storageclass
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gluster-heketi
+provisioner: kubernetes.io/glusterfs
+parameters:
+  resturl: "http://172.17.2.2:8080"
+  restauthenabled: "false"
+
+
+
+# pvc
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: pvc-gluster-heketi
+spec:
+  storageClassName: gluster-heketi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+
+# pod use pvc
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-use-pvc
+spec:
+  containers:
+  - name: pod-use-pvc
+    image: busybox
+    command:
+    - sleep
+    - "3600"
+    volumeMounts:
+    - name: gluster-volume
+      mountPath: "/pv-data"
+      readOnly: false
+  volumes:
+  - name: gluster-volume
+    persistentVolumeClaim:
+      claimName: pvc-gluster-heketi

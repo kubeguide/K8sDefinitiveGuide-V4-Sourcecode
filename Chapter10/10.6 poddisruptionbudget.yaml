@@ -1,0 +1,37 @@
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: nginx
+  labels:
+    name: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      name: nginx
+  template:
+    metadata:
+      labels:
+        name: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        ports:
+        - containerPort: 80
+          protocol: TCP
+
+---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: nginx
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels:
+      name: nginx
+
+
+$ curl -v -H 'Content-type: application/json' http://<k8s_master>/api/v1/namespaces/default/pods/nginx-1968750913-0k01k/eviction -d @eviction.json

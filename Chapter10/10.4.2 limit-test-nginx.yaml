@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: limit-test-nginx
+  labels:
+    name: limit-test-nginx
+spec:
+  containers:
+  - name: limit-test-nginx
+    image: nginx
+    resources:
+      limits:
+        cpu: "1"
+        memory: 512Mi
+      requests:
+        cpu: "0.8"
+        memory: 250Mi

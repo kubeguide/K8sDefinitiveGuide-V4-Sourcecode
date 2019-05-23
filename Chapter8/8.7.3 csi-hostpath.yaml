@@ -1,0 +1,501 @@
+# csidrivers
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: csidrivers.csi.storage.k8s.io
+  labels:
+    addonmanager.kubernetes.io/mode: Reconcile
+spec:
+  group: csi.storage.k8s.io
+  names:
+    kind: CSIDriver
+    plural: csidrivers
+  scope: Cluster
+  validation:
+    openAPIV3Schema:
+      properties:
+        spec:
+          description: Specification of the CSI Driver.
+          properties:
+            attachRequired:
+              description: Indicates this CSI volume driver requires an attach operation,and that Kubernetes should call attach and wait for any attach operationto complete before proceeding to mount.
+              type: boolean
+            podInfoOnMountVersion:
+              description: Indicates this CSI volume driver requires additional pod
+                information (like podName, podUID, etc.) during mount operations.
+              type: string
+  version: v1alpha1
+
+
+# csinodeinfo
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: csinodeinfos.csi.storage.k8s.io
+  labels:
+    addonmanager.kubernetes.io/mode: Reconcile
+spec:
+  group: csi.storage.k8s.io
+  names:
+    kind: CSINodeInfo
+    plural: csinodeinfos
+  scope: Cluster
+  validation:
+    openAPIV3Schema:
+      properties:
+        spec:
+          description: Specification of CSINodeInfo
+          properties:
+            drivers:
+              description: List of CSI drivers running on the node and their specs.
+              type: array
+              items:
+                properties:
+                  name:
+                    description: The CSI driver that this object refers to.
+                    type: string
+                  nodeID:
+                    description: The node from the driver point of view.
+                    type: string
+                  topologyKeys:
+                    description: List of keys supported by the driver.
+                    items:
+                      type: string
+                    type: array
+        status:
+          description: Status of CSINodeInfo
+          properties:
+            drivers:
+              description: List of CSI drivers running on the node and their statuses.
+              type: array
+              items:
+                properties:
+                  name:
+                    description: The CSI driver that this object refers to.
+                    type: string
+                  available:
+                    description: Whether the CSI driver is installed.
+                    type: boolean
+                  volumePluginMechanism:
+                    description: Indicates to external components the required mechanism
+                      to use for any in-tree plugins replaced by this driver.
+                    pattern: in-tree|csi
+                    type: string
+  version: v1alpha1
+
+
+# csi-hostpath-attacher
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: csi-attacher
+  # replace with non-default namespace name
+  namespace: default
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: external-attacher-runner
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["csi.storage.k8s.io"]
+    resources: ["csinodeinfos"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["get", "list", "watch", "update"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-attacher-role
+subjects:
+  - kind: ServiceAccount
+    name: csi-attacher
+    # replace with non-default namespace name
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: external-attacher-runner
+  apiGroup: rbac.authorization.k8s.io
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  # replace with non-default namespace name
+  namespace: default
+  name: external-attacher-cfg
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "watch", "list", "delete", "update", "create"]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-attacher-role-cfg
+  # replace with non-default namespace name
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: csi-attacher
+    # replace with non-default namespace name
+    namespace: default
+roleRef:
+  kind: Role
+  name: external-attacher-cfg
+  apiGroup: rbac.authorization.k8s.io
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: csi-hostpath-attacher
+  labels:
+    app: csi-hostpath-attacher
+spec:
+  selector:
+    app: csi-hostpath-attacher
+  ports:
+    - name: dummy
+      port: 12345
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: csi-hostpath-attacher
+spec:
+  serviceName: "csi-hostpath-attacher"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: csi-hostpath-attacher
+  template:
+    metadata:
+      labels:
+        app: csi-hostpath-attacher
+    spec:
+      serviceAccountName: csi-attacher
+      containers:
+        - name: csi-attacher
+          image: quay.io/k8scsi/csi-attacher:v1.0.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - --v=5
+            - --csi-address=$(ADDRESS)
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          volumeMounts:
+          - mountPath: /csi
+            name: socket-dir
+      volumes:
+        - hostPath:
+            path: /var/lib/kubelet/plugins/csi-hostpath
+            type: DirectoryOrCreate
+          name: socket-dir
+
+
+# csi-hostpath-provisioner
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: csi-provisioner
+  # replace with non-default namespace name
+  namespace: default
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: external-provisioner-runner
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch", "create", "update", "patch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots"]
+    verbs: ["get", "list"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents"]
+    verbs: ["get", "list"]
+  - apiGroups: ["csi.storage.k8s.io"]
+    resources: ["csinodeinfos"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-provisioner-role
+subjects:
+  - kind: ServiceAccount
+    name: csi-provisioner
+    # replace with non-default namespace name
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: external-provisioner-runner
+  apiGroup: rbac.authorization.k8s.io
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  # replace with non-default namespace name
+  namespace: default
+  name: external-provisioner-cfg
+rules:
+- apiGroups: [""]
+  resources: ["endpoints"]
+  verbs: ["get", "watch", "list", "delete", "update", "create"]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-provisioner-role-cfg
+  # replace with non-default namespace name
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: csi-provisioner
+    # replace with non-default namespace name
+    namespace: default
+roleRef:
+  kind: Role
+  name: external-provisioner-cfg
+  apiGroup: rbac.authorization.k8s.io
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: csi-hostpath-provisioner
+  labels:
+    app: csi-hostpath-provisioner
+spec:
+  selector:
+    app: csi-hostpath-provisioner
+  ports:
+    - name: dummy
+      port: 12345
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: csi-hostpath-provisioner
+spec:
+  serviceName: "csi-hostpath-provisioner"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: csi-hostpath-provisioner
+  template:
+    metadata:
+      labels:
+        app: csi-hostpath-provisioner
+    spec:
+      serviceAccountName: csi-provisioner
+      containers:
+        - name: csi-provisioner
+          image: quay.io/k8scsi/csi-provisioner:v1.0.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--provisioner=csi-hostpath"
+            - "--csi-address=$(ADDRESS)"
+            - "--connection-timeout=15s"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+      volumes:
+        - hostPath:
+            path: /var/lib/kubelet/plugins/csi-hostpath
+            type: DirectoryOrCreate
+          name: socket-dir
+
+
+# csi-hostpathplugin
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: csi-node-sa
+  # replace with non-default namespace name
+  namespace: default
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: driver-registrar-runner
+rules:
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  # The following permissions are only needed when running
+  # driver-registrar without the --kubelet-registration-path
+  # parameter, i.e. when using driver-registrar instead of
+  # kubelet to update the csi.volume.kubernetes.io/nodeid
+  # annotation. That mode of operation is going to be deprecated
+  # and should not be used anymore, but is needed on older
+  # Kubernetes versions.
+  # - apiGroups: [""]
+  #   resources: ["nodes"]
+  #   verbs: ["get", "update", "patch"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-driver-registrar-role
+subjects:
+  - kind: ServiceAccount
+    name: csi-node-sa
+    # replace with non-default namespace name
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: driver-registrar-runner
+  apiGroup: rbac.authorization.k8s.io
+
+---
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: csi-hostpathplugin
+spec:
+  selector:
+    matchLabels:
+      app: csi-hostpathplugin
+  template:
+    metadata:
+      labels:
+        app: csi-hostpathplugin
+    spec:
+      serviceAccountName: csi-node-sa
+      hostNetwork: true
+      containers:
+        - name: driver-registrar
+          image: quay.io/k8scsi/csi-node-driver-registrar:v1.0.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - --v=5
+            - --csi-address=/csi/csi.sock
+            - --kubelet-registration-path=/var/lib/kubelet/plugins/csi-hostpath/csi.sock
+          env:
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          volumeMounts:
+          - mountPath: /csi
+            name: socket-dir
+          - mountPath: /registration
+            name: registration-dir
+        - name: hostpath
+          image: quay.io/k8scsi/hostpathplugin:v1.0.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--v=5"
+            - "--endpoint=$(CSI_ENDPOINT)"
+            - "--nodeid=$(KUBE_NODE_NAME)"
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+            - mountPath: /var/lib/kubelet/pods
+              mountPropagation: Bidirectional
+              name: mountpoint-dir
+      volumes:
+        - hostPath:
+            path: /var/lib/kubelet/plugins/csi-hostpath
+            type: DirectoryOrCreate
+          name: socket-dir
+        - hostPath:
+            path: /var/lib/kubelet/pods
+            type: DirectoryOrCreate
+          name: mountpoint-dir
+        - hostPath:
+            path: /var/lib/kubelet/plugins_registry
+            type: Directory
+          name: registration-dir
+
+
+
+
+# app to use csi storage
+# csi-storageclass
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: csi-hostpath-sc
+provisioner: csi-hostpath
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+
+# csi-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: csi-pvc
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: csi-hostpath-sc
+
+# pod
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: my-csi-app
+spec:
+  containers:
+    - name: my-csi-app
+      image: busybox
+      imagePullPolicy: IfNotPresent
+      command: [ "sleep", "1000000" ]
+      volumeMounts:
+      - mountPath: "/data"
+        name: my-csi-volume
+  volumes:
+    - name: my-csi-volume
+      persistentVolumeClaim:
+        claimName: csi-pvc

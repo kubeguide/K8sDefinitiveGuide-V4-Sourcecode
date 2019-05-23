@@ -1,0 +1,54 @@
+# AWS EBS
+---
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: slow
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: io1
+  zone: us-east-1d
+  iopsPerGB: "10"
+
+
+# GCE PD
+---
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: slow
+provisioner: kubernetes.io/gce-pd
+parameters:
+  type: pd-standard
+  zone: us-central1-a
+
+
+# glusterfs
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: slow
+provisioner: kubernetes.io/glusterfs
+parameters:
+  resturl: "http://127.0.0.1:8081"
+  clusterid: "630372ccdc720a92c681fb928f27b53f"
+  restauthenabled: "true"
+  restuser: "admin"
+  secretNamespace: "default"
+  secretName: "heketi-secret"
+  gidMin: "40000"
+  gidMax: "50000"
+  volumetype: "replicate:3"
+
+
+# openstack cinder
+---
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: gold
+provisioner: kubernetes.io/cinder
+parameters:
+  type: fast
+  availability: nova

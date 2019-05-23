@@ -1,0 +1,80 @@
+# dbnet
+{
+  "cniVersion": "0.4.0",
+  "name": "dbnet",
+  "type": "bridge",
+  "bridge": "cni0",
+  "ipam": {
+    "type": "host-local",
+    "subnet": "10.1.0.0/16",
+    "gateway": "10.1.0.1"
+  },
+  "dns": {
+    "nameservers": [ "10.1.0.1" ]
+  }
+}
+
+
+
+# ipam plugin
+{
+  "cniVersion": "0.4.0",
+  "ips": [
+      {
+          "version": "<4-or-6>",
+          "address": "<ip-and-prefix-in-CIDR>",
+          "gateway": "<ip-address-of-the-gateway>"  (optional)
+      },
+      ......
+  ],
+  "routes": [                                       (optional)
+      {
+          "dst": "<ip-and-prefix-in-cidr>",
+          "gw": "<ip-of-next-hop>"                  (optional)
+      },
+      ......
+  ]
+  "dns": {
+    "nameservers": <list-of-nameservers>            (optional)
+    "domain": <name-of-local-domain>                (optional)
+    "search": <list-of-search-domains>              (optional)
+    "options": <list-of-options>                    (optional)
+  }
+}
+
+
+
+# multiple plugin
+{
+  "cniVersion": "0.4.0",
+  "name": "dbnet",
+  "plugins": [
+    {
+      "type": "bridge",
+      // type (plugin) specific
+      "bridge": "cni0",
+      // args may be ignored by plugins
+      "args": {
+        "labels" : {
+            "appVersion" : "1.0"
+        }
+      },
+      "ipam": {
+        "type": "host-local",
+        // ipam specific
+        "subnet": "10.1.0.0/16",
+        "gateway": "10.1.0.1"
+      },
+      "dns": {
+        "nameservers": [ "10.1.0.1" ]
+      }
+    },
+    {
+      "type": "tuning",
+      "sysctl": {
+        "net.core.somaxconn": "500"
+      }
+    }
+  ]
+}
+
