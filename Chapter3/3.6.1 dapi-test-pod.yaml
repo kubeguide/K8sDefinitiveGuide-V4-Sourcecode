@@ -5,9 +5,9 @@ metadata:
 spec:
   containers:
   - name: test-container
-  image: busybox
-  command: [ "/bin/sh", "-c", "env" ]
-  env:
+    image: busybox
+    command: [ "/bin/sh", "-c", "env" ]
+    env:
     - name: MY_POD_NAME
       valueFrom:
         fieldRef:
